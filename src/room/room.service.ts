@@ -34,7 +34,7 @@ export class RoomService {
     if (!room) throw new BadRequestException('No such room exists');
 
     const qr = await QRCode.toDataURL(
-      `http://localhost:5173/lessons/${room.id}`,
+      `${String(process.env.FRONTEND_URL)}/lessons/${room.id}`,
     );
 
     if (!qr) throw new BadRequestException('Error generating qr');
