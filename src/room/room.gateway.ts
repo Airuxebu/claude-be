@@ -37,6 +37,16 @@ export class RoomGateway {
     }: { roomId: string; userId: string; preferredLanguage: string },
     @ConnectedSocket() client: Socket,
   ) {
+    const existingSession = this.users.get(client.id);
+    if (
+      existingSession &&
+      existingSession.preferredLanguage !== preferredLanguage
+    ) {
+      const oldLangRoom = `${roomId}:${existingSession.preferredLanguage}`;
+      client.leave(oldLangRoom);
+      console.log(`Client ${userId} left old language room ${oldLangRoom}`);
+    }
+
     client.join(roomId);
 
     const langRoom = `${roomId}:${preferredLanguage}`;
@@ -112,27 +122,13 @@ export class RoomGateway {
     if (!user || !data.audio) return;
 
     const roomId = data.roomId;
-    const sourceLang = user.preferredLanguage;
     const base64 = data.audio.toString('base64');
 
-    // 1. PASS-THROUGH: Send raw audio to users with the SAME language
-    // client.to(...) broadcasts to everyone in that room EXCEPT the sender
-    const sameLangRoom = `${roomId}:${sourceLang}`;
-    client.to(sameLangRoom).emit('voice:audio', {
-      audio: base64,
-      language: sourceLang,
-      type: 'original', // Frontend can use this to show "Original Audio" vs "AI"
-      senderId: user.userId,
-      createdAt: new Date(),
-    });
-
-    // 2. TRANSLATION: Send to AI for DIFFERENT languages only
+    // 1. TRANSLATION: Send to AI for DIFFERENT languages only
     const allLangs = this.roomLanguages.get(roomId) || new Set();
 
     // Filter: Remove the speaker's language from the AI targets
-    const targetLangs = Array.from(allLangs).filter(
-      (lang) => lang !== sourceLang,
-    );
+    const targetLangs = Array.from(allLangs);
 
     if (targetLangs.length > 0) {
       // We broadcast to the specific languages needed
@@ -149,7 +145,7 @@ export class RoomGateway {
   }
 
   @OnEvent('genai.voice')
-  handleVoice({
+  async handleVoice({
     audio,
     roomId,
     language,
@@ -165,12 +161,21 @@ export class RoomGateway {
 
     console.log(`Sending audio chunk to room ${targetRoom}`);
 
-    this.server.to(targetRoom).emit('voice:audio', {
-      audio: audio,
-      language: language,
-      type: 'translated',
-      senderId,
-      createdAt: new Date(),
-    });
+    const sockets = await this.server.in(targetRoom).fetchSockets();
+
+    for (const socket of sockets) {
+      const session = this.users.get(socket.id);
+
+      // DO NOT send the audio back to the person who is currently speaking
+      if (session?.userId === senderId) continue;
+
+      this.server.to(socket.id).emit('voice:audio', {
+        audio: audio,
+        language: language,
+        type: 'translated',
+        senderId,
+        createdAt: new Date(),
+      });
+    }
   }
 }
