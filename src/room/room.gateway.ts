@@ -13,7 +13,7 @@ import { TranslationService } from 'src/translation/translation.service';
 
 type UserSession = { userId: string; preferredLanguage: string };
 
-@WebSocketGateway(80, {})
+@WebSocketGateway(3001, {})
 export class RoomGateway {
   private users = new Map<string, UserSession>();
   private roomLanguages = new Map<string, Set<string>>();
