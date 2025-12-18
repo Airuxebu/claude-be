@@ -1,0 +1,69 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ORGANIZATION_OWNER
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+model User {
+  id       String   @id @default(uuid())
+  email    String   @unique
+  password String
+  name     String?
+  role     UserRole @default(STUDENT)
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  chatMessages   ChatMessage[]
+  rooms          Room[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Organization {
+  id   String @id @default(uuid())
+  name String
+
+  users User[]
+  rooms Room[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Room {
+  id             String        @id @default(uuid())
+  name           String
+  isActive       Boolean       @default(true)
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  chatMessages   ChatMessage[]
+  teacher        User          @relation(fields: [teacherId], references: [id])
+  teacherId      String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChatMessage {
+  id      String @id @default(uuid())
+  content String
+
+  room     Room   @relation(fields: [roomId], references: [id])
+  roomId   String
+  sender   User   @relation(fields: [senderId], references: [id])
+  senderId String
+
+  createdAt DateTime @default(now())
+}
